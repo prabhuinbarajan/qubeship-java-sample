@@ -17,16 +17,43 @@ endpoint:
 variables:
   - name: APP_VERSION
     value: v0.1
+  - name: supportFortify
+    value: true
 build:
   compile:
+    actions:
+     - cd Frontend && npm install && npm run build && npm start 
+     - cd Services && mvn package
     publish:
-     - target/
+     - Frontend/build/
+     - Services/target/
+  static_code_analysis:
+    actions:
+      - /opt/fortify/bin/fortify-java-analyzer.sh
+      - /opt/fortify/bin/fortify-result-analyzer.sh Services/target/LDDS-rest-1.0.0-SNAPSHOT.html 'High<14 && Critical<12' 'pass' Services/target/fortify-summary.txt
+    publish:
+      - Services/target/LDDS-rest-1.0.0-SNAPSHOT.html:fortify-report-detail.html
+      - Services/target/LDDS-rest-1.0.0-SNAPSHOT.fpr
+      - Services/target/fortify-summary.txt
 bake:
-  skip: false
+  docker_build:
+    actions:
+      - "docker build -t ldds-web -f Docker/web/Dockerfile ."
+      - "docker build -t ldds-db -f Docker/db/Dockerfile  ." 
+  push_to_registry:
+    actions:
+      - "docker tag ldds-web $1/ldds-web:latest"
+      - "docker push $1/ldds-web:latest"
+      - "docker tag ldds-db $1/ldds-db:latest"
+      - "docker push $1/ldds-db:latest"
+    args:
+      - $(target_registry).additionalInfo.account
 test:
   skip: true
 deploy_to_qa:
   skip: true
 deploy_to_prod:
-  skip: false
+  release_to_prod:
+    actions:
+      - "docker-compose -f Docker/docker-compose-deploy.yml up -d"
 
